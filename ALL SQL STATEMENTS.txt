@@ -1,0 +1,357 @@
+//-----------------------------Create Table Statements-----------------------------
+CREATE TABLE User(
+    Username varchar(50),
+    Email varchar(50) NOT NULL,
+    Password char(32) NOT NULL, 
+    UserType enum('ADMIN', 'OWNER', 'VISITOR') NOT NULL,
+    PRIMARY KEY(Username),
+    UNIQUE(Email)
+) ENGINE = InnoDB;
+
+CREATE TABLE Property(
+    ID int CHECK (ID < 100,000), 
+    Name varchar(255) NOT NULL,
+    Size float NOT NULL,
+    IsCommercial boolean NOT NULL,
+    IsPublic boolean NOT NULL,
+    Street varchar(255) NOT NULL,
+    City varchar(100) NOT NULL,
+    Zip int NOT NULL,
+    PropertyType enum('FARM', 'GARDEN', 'ORCHARD') NOT NULL,
+    Owner varchar(50) NOT NULL,
+    ApprovedBy varchar(50),
+    PRIMARY KEY(ID),
+    UNIQUE(Name),
+    FOREIGN KEY (Owner) REFERENCES User(Username)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY(ApprovedBy) REFERENCES User(Username)
+        ON DELETE SET NULL ON UPDATE CASCADE,
+) ENGINE = InnoDB;
+
+CREATE TABLE Visit(
+    Username varchar(50),
+    PropertyID int,
+    VisitDate timestamp NOT NULL,
+    Rating int NOT NULL CHECK (Rating >= 1 AND Raing <= 5),
+    CONSTRAINT Pk_Visit PRIMARY KEY (Username, PropertyID),
+    FOREIGN KEY (Username) REFERENCES User(Username) 
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (PropertyID) REFERENCES Property(ID) 
+        ON DELETE CASCADE ON UPDATE CASCADE,
+) ENGINE = InnoDB;
+
+CREATE TABLE FarmItem(
+    Name varchar(100),
+    IsApproved boolean NOT NULL,
+    Type enum('ANIMAL', 'FRUIT', 'FLOWER', 'VEGETABLE', 'NUT') NOT NULL,
+    PRIMARY KEY(Name)
+) ENGINE = InnoDB;
+
+CREATE TABLE Has(
+    PropertyID int,
+    ItemName varchar(100),
+    CONSTRAINT Pk_Has PRIMARY KEY(PropertyID, ItemName),
+    FOREIGN KEY (PropertyID) REFERENCES Property(ID) 
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (ItemName) REFERENCES FarmItem(Name) 
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE = InnoDB;
+
+
+//------------------------Assertions-----------------------------------------------
+CREATE ASSERTION ORCHARD_GROWS
+CHECK( NOT EXISTS(SELECT Property.Name, ID, Has.ItemName, Type
+                    FROM FarmItem, Property, Has
+                    WHERE Has.PropertyID = Property.ID AND PropertyType = "ORCHARD" AND Has.ItemName = FarmItem.Name AND (Type = "ANIMAL" OR Type = "FLOWER" OR Type = "VEGETABLE")));
+
+CREATE ASSERTION GARDEN_GROWS
+CHECK( NOT EXISTS(SELECT Property.Name, ID, Has.ItemName, Type
+                    FROM FarmItem, Property, Has
+                    WHERE Has.PropertyID = Property.ID AND PropertyType = "GARDEN" AND Has.ItemName = FarmItem.Name AND (Type = "ANIMAL" OR Type = "FRUIT" OR Type = "NUT")));
+
+                    
+
+//-------------------View: Owners_Properties------------------------------------
+CREATE VIEW Owners_Properties
+AS SELECT Owner, Name, Street AS Address, City, Zip, Size, PropertyType As Type, IsPublic As Public, IsCommercial As Commercial, ID, IF(ApprovedBy IS NULL, false, true) AS isValid, Visits, Avg_Rating
+FROM Property, VISIT_SUMMARY
+WHERE PropertyID = ID
+
+Union(Select Owner, Name, Street, City, Zip, Size, PropertyType, IsPublic, IsCommercial, ID, IF(1=1, false, true) AS isValid, If(1=1,0,0), If(1=1,0,0)
+FROM Property
+WHERE ApprovedBy IS NULL);
+
+//-------------------View: VISIT_SUMMARY------------------------------------
+CREATE VIEW VISIT_SUMMARY
+AS SELECT PropertyID, COUNT(PropertyID) AS Visits, AVG(Rating) AS Avg_Rating
+    FROM Visit
+    GROUP BY PropertyID;
+
+//-------------------QUERY 0---------------------------------------------
+SELECT Email, Password, UserType
+FROM User
+WHERE Email = emailField.getText() AND Password = passwordField.getText();
+
+//-------------------QUERY 1------------------------------------
+SELECT COUNT(Username) 
+FROM User 
+WHERE Email = emailField.getText() AND Password=passwordField.getText();
+
+//-------------------QUERY 2------------------------------------ 
+SELECT COUNT(Email)
+FROM User 
+WHERE Email = emailField.getText() OR Username = usernameField.getText();
+
+//-------------------QUERY 3------------------------------------
+INSERT INTO User(Username, Email, Password, UserType)
+VALUES(usernameField.getText(), emailField.getText(), passwordField.getText(), userType);
+
+//-------------------QUERY 4------------------------------------ 
+INSERT INTO Property(Name, Size, isCommercial, Street, City, Zip, PropertyType, Owner, isPublic, ID)
+VALUES(propNameField.getText(), sizeField.getText(), isCommercial.getSelectedItem(), streetField.getText(), cityField.getText(), zipField.getText(), typeMenu.getSelectedItem(), owner.Username, publicMenu.getSelectedItem(), ID);
+
+//-------------------QUERY 5------------------------------------ 
+INSERT INTO Has(PropertyID, ItemName)
+VALUES(ID, farmItem);
+
+//-------------------QUERY 6------------------------------------ 
+SELECT Name, Address, City, Zip, Size, Type, Public, Commercial, ID, isValid, Visits, Avg_Rating
+FROM Owners_Properties
+WHERE Owner = owner_logged_In
+ORDER BY Name;
+
+//-------------------QUERY 7------------------------------------ 
+SELECT Name, Address, City, Zip, Size, Type, Public, Commercial, ID, isValid, Visits, Avg_Rating
+FROM Owners_Properties
+WHERE Owner = owner_logged_In AND searchMenu.getSelectedItem() like "%" + searchField.getText() + "%"
+ORDER BY Name;
+
+//-------------------QUERY 8------------------------------------ 
+SELECT P.Name AS Name, P.Street, P.City, P.Zip, P.Size, P.PropertyType, P.isPublic, P.isCommercial, P.ID, V.Visits, V.Avg_Rating
+FROM Property AS P, VISIT_SUMMARY AS V
+WHERE P.ID = V.PropertyID AND P.ApprovedBy IS NOT NULL AND P.Owner != this.Username
+ORDER BY Name;
+
+//-------------------QUERY 9------------------------------------ 
+SELECT P.Name, P.Street, P.City, P.Zip, P.Size, P.PropertyType, P.isPublic, P.isCommercial, P.ID, V.Visits, V.Avg_Rating
+FROM Property AS P, VISIT_SUMMARY AS V
+WHERE P.ID = V.PropertyID AND P.ApprovedBy IS NOT NULL AND P.Owner != this.Username AND searchMenu.getSelectedItem() like "%" + searchField.getText() + "%"
+ORDER BY Name;
+
+//-------------------QUERY 10------------------------------------ 
+SELECT Name, Owner, U.Email, VS.Visits, Street, City, Zip, Size, VS.Avg_Rating, PropertyType, IsPublic, IsCommercial, ID
+FROM Property, VISIT_SUMMARY AS VS, User as U
+WHERE ID = 5 AND U.Username = Owner AND VS.PropertyID = ID;
+
+SELECT ItemName 
+FROM Has 
+WHERE ItemName in (SELECT Name FROM FarmItem WHERE IsApproved = TRUE and Type != "ANIMAL") AND PropertyID = thisID;
+
+SELECT ItemName 
+FROM Has 
+WHERE ItemName in (SELECT Name FROM FarmItem WHERE IsApproved = TRUE and Type = "ANIMAL") AND PropertyID = thisID;
+
+//-------------------QUERY 11------------------------------------
+SELECT Name, Street, City, Zip, Size, PropertyType, IsPublic, IsCommercial, ID
+FROM Property
+WHERE ID = thisID;
+
+SELECT ItemName 
+FROM Has 
+WHERE ItemName in (SELECT Name FROM FarmItem WHERE IsApproved = TRUE and Type != "ANIMAL" ) AND PropertyID= thisID;
+
+SELECT ItemName 
+FROM Has 
+WHERE ItemName in (SELECT Name FROM FarmItem WHERE IsApproved = TRUE and Type = "ANIMAL" ) AND PropertyID = thisID;
+
+
+//-------------------QUERY 12------------------------------------
+UPDATE Property
+SET Name = nameField.getText(), Street = streetField.getText(), City = cityField.getText(), Zip = zipField.getText(), Size = sizeField.getText(), IsPublic = publicMenu.getText(), IsCommercial = commercialMenu.getText(), ApprovedBy = NULL
+WHERE ID = thisID;
+
+//-------------------QUERY 13------------------------------------
+INSERT INTO FarmItem(name, IsApproved, Type) 
+VALUES (nameField.getName(), False, typeMenu.getType());
+
+//-------------------Query 13.5----------------------------------
+SELECT Count(Name)
+FROM Property
+WHERE Name = nameField.GetName()
+
+//-------------------QUERY 14------------------------------------
+INSERT INTO Property (Name, Street, City, Zip, Size, PropertyType, IsCommercial, IsPublic, Owner, ID)
+VALUES (nameField.getText(), streetField.getText(), cityField.getText(), zipField.getText(), sizeField.getText(), typeMenu.getText(), commercialMenu.getText(), publicMenu.getText(), this.ownerUsername, nextID);
+
+INSERT INTO Has(PropertyID, ItemName)
+VALUES(getID, animalMenu.getText())
+
+INSERT INTO Has(PropertyID, ItemName)
+VALUES(getID, cropMenu.getText())
+
+//-------------------QUERY 15------------------------------------
+SELECT Name, Street, City, Zip, Size, PropertyType, IsPublic, IsCommercial, ID, Owner 
+FROM Property
+WHERE ApprovedBy IS NULL
+ORDER BY Name;
+
+//-------------------QUERY 16------------------------------------
+SELECT Name, Street, City, Zip, Size, PropertyType, IsPublic, IsCommercial, ID, Owner 
+FROM Property
+WHERE searchMenu.getText() like "%" + searchField.getText() + "%" and ApprovedBy IS NULL
+ORDER BY Name;
+
+//-------------------QUERY 17------------------------------------
+UPDATE Property 
+SET Name = nameField.getName(), Street = streetField.getText(), City = cityField.getText(), Zip = zipField.getText(), Size = sizeField.getText(), IsPublic = publicField.getText(), IsCommercial = commercialField.getText(), ApprovedBy = adminLoggedIn
+WHERE ID = thisID;
+
+//-------------------QUERY 18a------------------------------------
+DELETE FROM Has 
+WHERE ItemName = getItems AND PropertyID = this.ID;
+
+//-------------------QUERY 18b-----------------------------------
+INSERT INTO Has 
+VALUES (this.ID, itemName);
+
+//-------------------QUERY 19------------------------------------
+SELECT Name, Street As Address, City, Zip, Size, PropertyType as Type, IsPublic as Public, IsCommercial as Commercial, ID, ApprovedBy as Verified_By, avg_rating as Avg_Rating
+FROM Property, VISIT_SUMMARY
+WHERE ApprovedBy IS NOT NULL AND PropertyID = ID
+ORDER BY Name;
+
+//-------------------QUERY 20------------------------------------
+SELECT Name, Street As Address, City, Zip, Size, PropertyType as Type, IsPublic as Public, IsCommercial as Commercial, ID, ApprovedBy as Verified_By, avg_rating as Avg_Rating
+FROM Property, VISIT_SUMMARY
+WHERE ApprovedBy IS NOT NULL AND PropertyID = ID AND Name like "%" + searchField.getText() + "%"
+ORDER BY Name;
+
+//-------------------QUERY 21------------------------------------
+SELECT User.Username AS Username, Email, Test.Count AS Logged_Visits
+FROM User, (select Username, COUNT(Username) AS Count
+from Visit 
+group by Visit.Username) AS Test
+WHERE Test.Username = User.Username
+
+Union (SELECT Username, Email, IF(1=1,0,0) FROM User WHERE UserType = "Visitor" AND  Username NOT IN (SELECT Username From Visit))
+ORDER BY Username;
+
+//-------------------QUERY 22------------------------------------
+DELETE FROM User
+WHERE Username = seleced_username;
+
+//-------------------QUERY 23------------------------------------
+DELETE FROM Visit 
+WHERE Username = selected_username;
+
+//-------------------QUERY 24------------------------------------
+SELECT Username, Email, Count AS Logged_Visits
+FROM User, (select Name, COUNT(Username) AS Count
+from Visit 
+group by Visit.Username) AS Test
+WHERE Name = Username AND searchMenu.getText() like "%" + searchField.getText() + "%"
+ORDER BY Username;
+
+//-------------------QUERY 25------------------------------------
+Select User.Username AS Username, Email, Test.Number_of_Properties
+FROM User, (Select Owner, COUNT(Name) AS Number_of_properties FROM Property GROUP BY Owner) AS Test
+WHERE Test.Owner = User.Username
+ORDER BY Username;
+
+//-------------------QUERY 26------------------------------------
+DELETE FROM User
+WHERE Username = seleced_username;
+
+//-------------------QUERY 27------------------------------------ 
+Select User.Username AS Username, Email, Test.Number_of_Properties
+FROM User, (Select Owner, COUNT(Name) AS Number_of_properties FROM Property GROUP BY Owner) AS Test
+WHERE Test.Owner = User.Username AND searchMenu.getText() like "%" + searchField.getText() + "%"
+ORDER BY Username;
+
+//-------------------QUERY 28------------------------------------
+SELECT Name, Type 
+FROM FarmItem 
+WHERE IsApproved = True
+ORDER BY Name;
+
+//-------------------QUERY 29------------------------------------
+INSERT INTO FarmItem 
+VALUES(nameField.getName(), True, typeMenu.getType());
+
+//-------------------QUERY 30------------------------------------
+SELECT Name, Type
+FROM FarmItem 
+WHERE IsApproved = True AND searchMenu.getText() like "%" + searchField.getText() + "%"
+ORDER BY Name;
+
+//-------------------QUERY 31------------------------------------
+DELETE FROM FarmItem 
+WHERE Name = selected_name;
+
+//-------------------QUERY 32------------------------------------
+SELECT Name, Type 
+FROM FarmItem 
+WHERE IsApproved = False
+ORDER BY Name;
+
+//-------------------QUERY 33------------------------------------
+UPDATE FarmItem 
+SET IsApproved = True
+WHERE Name = selectedName AND Type = selectedType;
+
+//-------------------QUERY 34------------------------------------
+DELETE FROM FarmItem 
+WHERE Name = selecedName AND Type = selectedType;
+
+//-------------------QUERY 35------------------------------------
+SELECT Name, Street AS Address, City, Zip, Size, PropertyType As Type, IsPublic AS Public, IsCommercial as Commercial, ID, Visits, Avg_Rating
+FROM Property, VISIT_SUMMARY
+WHERE PropertyID = ID
+ORDER BY Name;
+
+//-------------------QUERY 36------------------------------------ 
+SELECT Name, Street AS Address, City, Zip, Size, PropertyType As Type, IsPublic AS Public, IsCommercial as Commercial, ID, Visits, Avg_Rating
+FROM Property, VISIT_SUMMARY
+WHERE PropertyID = ID AND searchMenu.getText() like "%" + searchField.getText() + "%"
+ORDER BY Name;
+
+//-------------------QUERY 37------------------------------------ 
+SELECT Name, Owner, Email As Owner_Email, Visits, Street, City, Zip, Size, Avg_rating, PropertyType, IsPublic, IsCommercial, ID
+FROM Property, User, VISIT_SUMMARY
+WHERE User.Username = Property.Owner AND PropertyID = ID AND Name = selected_Property_Name
+
+SELECT ItemName AS Crops
+FROM Has, FarmItem
+WHERE PropertyID = selected_Property_ID AND Name = ItemName AND FarmItem.Type != "Animal"
+
+SELECT ItemName AS Animals
+FROM Has, FarmItem
+WHERE PropertyID = selected_Property_ID AND Name = ItemName AND FarmItem.Type = "Animal"
+
+//-------------------QUERY 38------------------------------------
+INSERT INTO Visit 
+VALUES (selectedName, ID, VisitDate, Rating);
+
+//-------------------QUERY 39------------------------------------ 
+DELETE FROM Visit
+WHERE Username = user_logged_in AND PropertyID = selected+property_ID;
+
+//-------------------QUERY 40------------------------------------ 
+SELECT Property.Name, VisitDate AS Date_Logged, Rating
+FROM Visit, Property
+WHERE Property.ID = Visit.PropertyID AND Visit.Username = user_logged_in.username
+ORDER BY Name;
+
+//-------------------QUERY 41------------------------------------
+DELETE FROM Property
+WHERE ID = selectedID;
+
+//-------------------QUERY 42------------------------------------ 
+DELETE FROM Visit 
+WHERE PropertyID = this.ID;
+
+//-------------------QUERY 43------------------------------------
+SELECT Name, Street, City, Zip, Size, PropertyType, IsPublic, IsCommercial
+FROM Property
+WHERE ID = selectedID;
+
